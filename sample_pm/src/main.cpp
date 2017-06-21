@@ -60,46 +60,103 @@ inline bool intersect_scene(const Ray& ray, double* t, int* id)
 
 void generate_photon(Ray* ray, Vector3* flux, int count, Random* random)
 {
-    const auto r1 = D_2PI * random->get_as_double();
-    const auto r2 = 1.0 - 2.0 * random->get_as_double();
-    const auto t = sqrt(1.0 - r2 * r2);
-    const auto light_pos = g_spheres[g_lightId].pos 
-                        + (g_spheres[g_lightId].radius + D_HIT_MIN) * Vector3(t * cos(r1), t * sin(r1), r2);
-    const auto normal = normalize(light_pos - g_spheres[g_lightId].pos);
-
-    // 基底ベクトル生成.
-    Vector3 u, v, w;
-    w = normal;
-    if (fabs(w.x) > 0.1)
-    { u = normalize(cross(Vector3(0, 1, 0), w)); }
-    else
-    { u = normalize(cross(Vector3(1, 0, 1), w)); }
-
-    v = cross(w, u);
-
-    const auto u1 = D_2PI * random->get_as_double();
-    const auto u2 = random->get_as_double();
-    const auto u2s = sqrt(u2);
-
-    const auto light_dir = normalize(u * cos(u1) * u2s + v * sin(u1) * u2s * w * sqrt(1.0 - u2));
-
-    ray->pos = light_pos;
-    ray->dir = light_dir;
-
-    auto sr2 = g_spheres[g_lightId].radius * g_spheres[g_lightId].radius;
-    *flux = g_spheres[g_lightId].emission * 4.0 * D_PI * sr2 * D_PI / count;
 }
 
-void create_photon_map(const int emit_count, PhotonMap& photon_map, Random* random)
+void photon_trace(const Ray& input_ray, int depth, Random* random)
 {
-    // 指定された数分フォトンを放出する.
-    for (auto i = 0; i < emit_count; ++i)
-    {
-        Ray     ray;
-        Vector3 flux;
+    Ray ray(input_ray.pos, input_ray.dir);
 
-        generate_photon(&ray, &flux, emit_count, random);
+    while (true)
+    {
+        double t;
+        int   id;
+
+        // シーンとの交差判定.
+        if (!intersect_scene(ray, &t, &id))
+        { break; }
+
+        // 交差物体.
+        const auto& obj = g_spheres[id];
+
+        // 交差位置.
+        const auto hit_pos = ray.pos + ray.dir * t;
+
+        // 法線ベクトル.
+        const auto normal  = normalize(hit_pos - obj.pos);
+
+        // 物体からのレイの入出を考慮した法線ベクトル.
+        const auto orienting_normal = (dot(normal, ray.dir) < 0.0) ? normal : -normal;
+
+        auto p = (obj.color.x + obj.color.y + obj.color.z) / 3.0;
+
+        // 打ち切り深度に達したら終わり.
+        if(depth > g_max_depth)
+        {
+            if (random->get_as_double() >= p)
+            { break; }
+        }
+        else
+        {
+            p = 1.0;
+        }
+
+        switch (obj.type)
+        {
+        case ReflectionType::Diffuse:
+            {
+                // photon map に格納.
+            }
+            break;
+
+        case ReflectionType::PerfectSpecular:
+            {
+                ray = Ray(hit_pos, reflect(ray.dir, normal));
+            }
+            break;
+
+        case ReflectionType::Refraction:
+            {
+                Ray reflect_ray = Ray(hit_pos, reflect(ray.dir, normal));
+                auto into = dot(normal, orienting_normal) > 0.0;
+
+                const auto nc = 1.0;
+                const auto nt = 1.5;
+                const auto nnt = (into) ? (nc / nt) : (nt / nc);
+                const auto ddn = dot(ray.dir, orienting_normal);
+                const auto cos2t = 1.0 - nnt * nnt * (1.0 - ddn * ddn);
+
+                if (cos2t < 0.0)
+                {
+                    ray = reflect_ray;
+                    break;
+                }
+
+                auto dir = normalize(ray.dir * nnt - normal * ((into) ? 1.0 : -1.0) * (ddn * nnt + sqrt(cos2t)));
+
+                const auto a = nt - nc;
+                const auto b = nt + nc;
+                const auto R0 = (a * a) / (b * b);
+                const auto c = 1.0 - ((into) ? -ddn : dot(dir, normal));
+                const auto Re = R0 + (1.0 - R0) * pow(c, 5.0);
+                const auto Tr = 1.0 - Re;
+                const auto prob = 0.25 + 0.5 * Re;
+
+                if (random->get_as_double() < prob)
+                {
+                    ray = reflect_ray;
+                }
+                else
+                {
+                    ray = Ray(hit_pos, dir);
+                }
+            }
+            break;
+        }
+
+        depth++;
     }
+
+    // kd-tree を構築
 }
 
 //-------------------------------------------------------------------------------------------------
