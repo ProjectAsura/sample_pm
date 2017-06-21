@@ -138,8 +138,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\include\photonmap.cpp" />
     <ClCompile Include="..\src\main.cpp" />
+    <ClCompile Include="..\src\photonmap.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\external\stb\stb_image.h" />

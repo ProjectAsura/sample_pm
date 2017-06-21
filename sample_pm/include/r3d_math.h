@@ -46,8 +46,15 @@ inline double saturate(double value)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 struct Vector2
 {
-    double x = 0.0;
-    double y = 0.0;
+    union
+    {
+        struct
+        {
+            double x;
+            double y;
+        };
+        double a[2];
+    };
 
     Vector2()
     { /* DO_NOTHING */ }
@@ -96,9 +103,16 @@ struct Vector2
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 struct Vector3
 {
-    double x = 0.0;
-    double y = 0.0;
-    double z = 0.0;
+    union
+    {
+        struct
+        {
+            double x;
+            double y;
+            double z;
+        };
+        double a[3];
+    };
 
     Vector3()
     { /* DO_NOTHING */ }

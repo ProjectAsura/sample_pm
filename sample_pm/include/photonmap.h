@@ -9,9 +9,7 @@
 // Includes
 //-------------------------------------------------------------------------------------------------
 #include <r3d_math.h>
-#include <r3d_stack_allocator.h>
-#include <vector>
-#include <queue>
+#include <cstdint>
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -19,10 +17,24 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 struct Photon
 {
-    Vector3     pos;    //!< 位置座標.
-    Vector3     flux;   //!< 放射束.
+    Vector3     pos;
+    int16_t     plane;
+    uint8_t     theta, phi;
+    Vector3     power;
 };
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// NearestPhotons structure
+///////////////////////////////////////////////////////////////////////////////////////////////////
+struct NearestPhotons
+{
+    int             max;
+    int             found;
+    int             got_heap;
+    Vector3         pos;
+    double*         dist2;
+    const Photon**  index;
+};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // PhotonMap class
@@ -35,22 +47,6 @@ class PhotonMap
     /* NOTHING */
 
 public:
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    // QueryResult structure
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    struct QueryResult
-    {
-        const Photon*   photon;
-        double          dist;
-
-        bool operator < (const QueryResult& value) const
-        { return dist < value.dist; }
-    };
-
-    using QueryArray  = std::vector<QueryResult>;
-    using QueryQueue  = std::priority_queue<QueryResult, QueryArray>;
-    using PhotonArray = std::vector<Photon>;
-
     //=============================================================================================
     // public variables.
     //=============================================================================================
@@ -60,77 +56,53 @@ public:
     // public methods.
     //=============================================================================================
 
-    //---------------------------------------------------------------------------------------------
-    //! @brief      コンストラクタです.
-    //---------------------------------------------------------------------------------------------
-    PhotonMap();
+    PhotonMap(int max_photons);
 
-    //---------------------------------------------------------------------------------------------
-    //! @brief      デストラクタです.
-    //---------------------------------------------------------------------------------------------
     ~PhotonMap();
 
-    //---------------------------------------------------------------------------------------------
-    //! @brief      kd-treeを構築します.
-    //---------------------------------------------------------------------------------------------
-    void build();
+    void store(const Vector3& power, const Vector3& pos, const Vector3& dir);
 
-    //---------------------------------------------------------------------------------------------
-    //! @brief      破棄処理を行います.
-    //---------------------------------------------------------------------------------------------
-    void clear();
+    void scale_photon_power(const double scale);
 
-    //---------------------------------------------------------------------------------------------
-    //! @brief      フォトン数を取得します.
-    //---------------------------------------------------------------------------------------------
-    size_t size() const;
+    void balance();
 
-    //---------------------------------------------------------------------------------------------
-    //! @brief      フォントマップに格納します.
-    //!
-    //! @param[in]      pos     フォトンの位置座標.
-    //! @param[in]      flux    フォトンの放射束.
-    //---------------------------------------------------------------------------------------------
-    void store(const Vector3& pos, const Vector3& flux);
+    void irradiance_estimate(
+        Vector3& irradiance,
+        const Vector3 pos,
+        const Vector3 normal,
+        const double max_dist,
+        const int photon_count);
 
-    //---------------------------------------------------------------------------------------------
-    //! @brief      最近傍フォトンを検索します.
-    //!
-    //! @param[in]      pos         フォトン位置です.
-    //! @param[in]      max_dist    最大検索半径です.
-    //! @param[out]     query       クエリ結果格納先です.
-    //---------------------------------------------------------------------------------------------
-    void search(
-        const Vector3&  pos, 
-        double          max_dist,
-        size_t          count,
-        QueryQueue&     result);
+    void locate_photons(NearestPhotons* const nearest_photon, const int index) const;
+
+    void photon_dir(Vector3& dir, const Photon* photon) const;
 
 private:
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    // Node structure
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    struct Node
-    {
-        Photon*     value;
-        Node*       left;
-        Node*       right;
-        int         axis;
+    void balance_segment(
+        Photon** pbal,
+        Photon** porg,
+        const int index,
+        const int start,
+        const int end);
 
-        Node()
-        : value(nullptr)
-        , left (nullptr)
-        , right(nullptr)
-        { /* DO_NOTHING*/ }
-    };
+    void median_split(
+        Photon** p,
+        const int start,
+        const int end,
+        const int median,
+        const int axis);
 
-    //=============================================================================================
-    // private variables.
-    //=============================================================================================
-    PhotonArray     m_photons;
-    Node*           m_root;
+    Photon* photons;
+    int stored_photons;
+    int half_stored_photons;
+    int max_photons;
+    int prev_scale;
 
-    Node* recusrive_build(PhotonArray::iterator begin, PhotonArray::iterator end, int depth);
-    void  recursive_clear(Node* node);
-    void  recursive_search(const Vector3& pos, double& max_dist, size_t count, Node* node, QueryQueue& result);
+    double costheta[256];
+    double sintheta[256];
+    double cosphi[256];
+    double sinphi[256];
+
+    Vector3 bbox_min;
+    Vector3 bbox_max;
 };
