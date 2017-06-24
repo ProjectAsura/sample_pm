@@ -38,7 +38,7 @@
     <ClInclude Include="..\include\r3d_stack_allocator.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\kd_tree.h">
+    <ClInclude Include="..\include\photon_map.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>

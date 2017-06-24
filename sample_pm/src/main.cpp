@@ -12,8 +12,7 @@
 #include <r3d_shape.h>
 #include <vector>
 #include <stb/stb_image_write.h>
-#include "photonmap.h"
-#include "kd_tree.h"
+#include "photon_map.h"
 
 
 namespace {
@@ -35,7 +34,7 @@ const Sphere  g_spheres[] = {
     Sphere(5.0,     Vector3(50.0,          81.6,          81.6), Vector3(),                   ReflectionType::Diffuse,          Vector3(12, 12, 12))
 };
 const int      g_lightId        = 8;
-const double   g_gather_radius  = 16.0;
+const double   g_gather_radius  = 32.0;
 const int      g_gather_count   = 512;
 
 //-------------------------------------------------------------------------------------------------
@@ -96,7 +95,7 @@ void generate_photon(Ray* ray, Vector3* flux, int count, Random* random)
 //-------------------------------------------------------------------------------------------------
 //      フォトンを追跡します.
 //-------------------------------------------------------------------------------------------------
-void photon_trace(const Ray& emit_ray, const Vector3& emit_flux, kd_tree* photon_map, Random* random)
+void photon_trace(const Ray& emit_ray, const Vector3& emit_flux, photon_map* photon_map, Random* random)
 {
     Ray ray(emit_ray.pos, emit_ray.dir);
     Vector3 flux = emit_flux;
@@ -107,9 +106,9 @@ void photon_trace(const Ray& emit_ray, const Vector3& emit_flux, kd_tree* photon
         int   id;
 
         // ゼロなら追ってもしょうがないので打ち切り.
-        if (fabs(flux.x) < FLT_EPSILON 
-         && fabs(flux.y) < FLT_EPSILON
-         && fabs(flux.z) < FLT_EPSILON)
+        if (fabs(flux.x) < DBL_EPSILON 
+         && fabs(flux.y) < DBL_EPSILON
+         && fabs(flux.z) < DBL_EPSILON)
         { break; }
 
         // シーンとの交差判定.
@@ -193,10 +192,10 @@ void photon_trace(const Ray& emit_ray, const Vector3& emit_flux, kd_tree* photon
                 const auto ddn = dot(ray.dir, orienting_normal);
                 const auto cos2t = 1.0 - nnt * nnt * (1.0 - ddn * ddn);
 
-                if (cos2t < 0.0)
+                if (cos2t < DBL_EPSILON)
                 {
                     ray = reflect_ray;
-                    flux += obj.color;
+                    flux *= obj.color;
                     break;
                 }
 
@@ -229,7 +228,7 @@ void photon_trace(const Ray& emit_ray, const Vector3& emit_flux, kd_tree* photon
 //-------------------------------------------------------------------------------------------------
 //      放射輝度を求めます.
 //-------------------------------------------------------------------------------------------------
-Vector3 radiance(const Ray& ray, int depth, Random* random, kd_tree* photon_map)
+Vector3 radiance(const Ray& ray, int depth, Random* random, photon_map* photon_map)
 {
     double t;
     int   id;
@@ -290,20 +289,23 @@ Vector3 radiance(const Ray& ray, int depth, Random* random, kd_tree* photon_map)
                 max_dist2 = max(max_dist2, p.dist);
             }
 
-            const auto max_dist = sqrt(max_dist2);
-            const auto k = 1.1;
-
-            for (size_t i = 0; i < photons.size(); ++i)
+            // 円錐フィルタ.
             {
-                const auto w = 1.0 - (sqrt(photons[i].dist) / (k * max_dist));
-                const auto v = (obj.color * photons[i].point->flux) / D_PI;
-                accumulated_flux += w * v;
-            }
-            accumulated_flux /= (1.0 - 2.0 / (3.0 * k));
+                const auto max_dist = sqrt(max_dist2);
+                const auto k = 1.1;
 
-            if (max_dist2 > 0)
-            {
-                return obj.emission + accumulated_flux / (D_PI * max_dist2) / p;
+                for (size_t i = 0; i < photons.size(); ++i)
+                {
+                    const auto w = 1.0 - (sqrt(photons[i].dist) / (k * max_dist));
+                    const auto v = (obj.color * photons[i].point->flux) / D_PI;
+                    accumulated_flux += w * v;
+                }
+                accumulated_flux /= (1.0 - 2.0 / (3.0 * k));
+
+                if (max_dist2 > 0)
+                {
+                    return obj.emission + accumulated_flux / (D_PI * max_dist2) / p;
+                }
             }
         }
         break;
@@ -325,7 +327,7 @@ Vector3 radiance(const Ray& ray, int depth, Random* random, kd_tree* photon_map)
             const auto ddn = dot(ray.dir, orienting_normal);
             const auto cos2t = 1.0 - nnt * nnt * (1.0 - ddn * ddn);
 
-            if (cos2t < 0.0)
+            if (cos2t < DBL_EPSILON)
             {
                 return obj.emission + obj.color * radiance(reflect_ray, depth + 1, random, photon_map) / p;
             }
@@ -420,7 +422,7 @@ int main(int argc, char** argv)
     image.resize(width * height);
 
     Random random(123456);
-    kd_tree photon_map;
+    photon_map photon_map;
 
     // レンダーターゲットをクリア.
     for (size_t i = 0; i < image.size(); ++i)
