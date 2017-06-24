@@ -144,6 +144,7 @@
   <ItemGroup>
     <ClInclude Include="..\external\stb\stb_image.h" />
     <ClInclude Include="..\external\stb\stb_image_write.h" />
+    <ClInclude Include="..\include\kd_tree.h" />
     <ClInclude Include="..\include\photonmap.h" />
     <ClInclude Include="..\include\r3d_camera.h" />
     <ClInclude Include="..\include\r3d_math.h" />

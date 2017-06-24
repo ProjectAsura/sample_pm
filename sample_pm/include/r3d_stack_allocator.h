@@ -27,7 +27,7 @@ struct stack_allocator
     { /* DO_NOTHING */ }
 
     T* allocate(size_t count)
-    { return reinterpret_cast<T*>(_malloca(sizeof(T) *count)); }
+    { return reinterpret_cast<T*>(alloca(sizeof(T) *count)); }
 
     void deallocate(T*, size_t)
     { /* DO_NOTHING */ }

@@ -44,5 +44,8 @@
     <ClInclude Include="..\include\r3d_stack_allocator.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\kd_tree.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
