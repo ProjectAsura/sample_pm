@@ -34,9 +34,9 @@ const Sphere  g_spheres[] = {
     Sphere(16.5,    Vector3(73.0,          16.5,          78.0), Vector3(0.99,  0.99,  0.99), ReflectionType::Refraction,       Vector3(0, 0, 0)),
     Sphere(5.0,     Vector3(50.0,          81.6,          81.6), Vector3(),                   ReflectionType::Diffuse,          Vector3(12, 12, 12))
 };
-const int      g_lightId = 8;
-const double   g_gather_radius = 64.0;
-const int      g_gather_count  = 64;
+const int      g_lightId        = 8;
+const double   g_gather_radius  = 16.0;
+const int      g_gather_count   = 512;
 
 //-------------------------------------------------------------------------------------------------
 //      シーンとの交差判定を行います.
@@ -61,6 +61,9 @@ inline bool intersect_scene(const Ray& ray, double* t, int* id)
     return (*t < D_HIT_MAX);
 }
 
+//-------------------------------------------------------------------------------------------------
+//      フォトンを生成します.
+//-------------------------------------------------------------------------------------------------
 void generate_photon(Ray* ray, Vector3* flux, int count, Random* random)
 {
     const auto r1 = D_2PI * random->get_as_double();
@@ -90,6 +93,9 @@ void generate_photon(Ray* ray, Vector3* flux, int count, Random* random)
     *flux = light.emission * 4.0 * D_PI * pow(light.radius, 2.0) * D_PI / count;
 }
 
+//-------------------------------------------------------------------------------------------------
+//      フォトンを追跡します.
+//-------------------------------------------------------------------------------------------------
 void photon_trace(const Ray& emit_ray, const Vector3& emit_flux, kd_tree* photon_map, Random* random)
 {
     Ray ray(emit_ray.pos, emit_ray.dir);
@@ -190,6 +196,7 @@ void photon_trace(const Ray& emit_ray, const Vector3& emit_flux, kd_tree* photon
                 if (cos2t < 0.0)
                 {
                     ray = reflect_ray;
+                    flux += obj.color;
                     break;
                 }
 
@@ -272,8 +279,7 @@ Vector3 radiance(const Ray& ray, int depth, Random* random, kd_tree* photon_map)
             Vector3 accumulated_flux(0, 0, 0);
             double max_dist2 = -1;
 
-//            std::vector<photon_query_result, stack_allocator<photon_query_result>> photons;
-            std::vector<photon_query_result> photons;
+            std::vector<photon_query_result, stack_allocator<photon_query_result>> photons;
             photons.reserve(result.size());
             while (!result.empty())
             {
@@ -304,7 +310,7 @@ Vector3 radiance(const Ray& ray, int depth, Random* random, kd_tree* photon_map)
 
     case ReflectionType::PerfectSpecular:
         {
-            return obj.emission + obj.color * radiance(Ray(hit_pos, reflect(ray.dir, normal)), depth + 1, random, photon_map);
+            return obj.emission + obj.color * radiance(Ray(hit_pos, reflect(ray.dir, normal)), depth + 1, random, photon_map) / p;
         }
         break;
 
@@ -321,7 +327,7 @@ Vector3 radiance(const Ray& ray, int depth, Random* random, kd_tree* photon_map)
 
             if (cos2t < 0.0)
             {
-                return obj.emission + obj.color * radiance(reflect_ray, depth + 1, random, photon_map);
+                return obj.emission + obj.color * radiance(reflect_ray, depth + 1, random, photon_map) / p;
             }
 
             auto dir = normalize(ray.dir * nnt - normal * ((into) ? 1.0 : -1.0) * (ddn * nnt + sqrt(cos2t)));
@@ -336,7 +342,7 @@ Vector3 radiance(const Ray& ray, int depth, Random* random, kd_tree* photon_map)
 
             Ray refract_ray(hit_pos, dir);
 
-            if (depth <= 2)
+            if (depth <= 3)
             {
                 return obj.emission + obj.color * (
                           radiance(reflect_ray, depth + 1, random, photon_map) * Re
@@ -345,11 +351,11 @@ Vector3 radiance(const Ray& ray, int depth, Random* random, kd_tree* photon_map)
 
             if (random->get_as_double() < prob)
             {
-                return obj.emission + radiance(reflect_ray, depth + 1, random, photon_map) * Re / prob / p;
+                return obj.emission + obj.color * radiance(reflect_ray, depth + 1, random, photon_map) * Re / prob / p;
             }
             else
             {
-                return obj.emission + radiance(refract_ray, depth + 1, random, photon_map) * Tr / (1.0 - prob) / p;
+                return obj.emission + obj.color * radiance(refract_ray, depth + 1, random, photon_map) * Tr / (1.0 - prob) / p;
             }
         }
         break;
@@ -397,7 +403,7 @@ int main(int argc, char** argv)
     // レンダーターゲットのサイズ.
     int width   = 640;
     int height  = 480;
-    int photons = 5000000;
+    int photons = 50 * 10000;
 
     // カメラ用意.
     Camera camera(
@@ -420,9 +426,11 @@ int main(int argc, char** argv)
     for (size_t i = 0; i < image.size(); ++i)
     { image[i] = g_back_ground; }
 
+    printf_s("generate photon phase ...");
+
     for(auto i=0; i<photons; ++i)
     {
-        Ray ray;
+        Ray     ray;
         Vector3 flux;
 
         // フォトンを生成.
@@ -432,13 +440,19 @@ int main(int argc, char** argv)
         photon_trace(ray, flux, &photon_map, &random);
     }
 
+    printf_s("done.\n");
+    printf_s("build photon map phase ...");
+
     // kd-tree構築.
     photon_map.build();
+
+    printf_s("done.\n");
 
     // 放射輝度推定.
     {
         for (auto y = 0; y < height; ++y)
         {
+            printf_s("radiance estimate %.2lf%%\r", double(y) / double(height) * 100.0);
             for (auto x = 0; x < width; ++x)
             {   
                 auto idx = y * width + x;
