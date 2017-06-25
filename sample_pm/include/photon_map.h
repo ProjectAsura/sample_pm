@@ -20,7 +20,7 @@ struct photon
 
 struct photon_query
 {
-    double      max_dist;
+    double      max_dist2;
     size_t      count;
     Vector3     pos;
     Vector3     normal;
@@ -29,18 +29,59 @@ struct photon_query
 struct photon_query_result
 {
     const photon*   point;
-    double          dist;
+    double          dist2;
 
-    photon_query_result(const photon* p, double d)
+    photon_query_result(const photon* p, double d2)
     : point (p)
-    , dist  (d)
+    , dist2 (d2)
     { /* DO_NOTHING */ }
 
     bool operator < (const photon_query_result& value) const
-    { return dist < value.dist; }
+    { return dist2 < value.dist2; }
 };
 
-using nearest_photon = std::priority_queue<photon_query_result, std::vector<photon_query_result>>;
+class nearest_photon
+{
+public:
+    nearest_photon(size_t size)
+    : m_photons()
+    , m_less()
+    { m_photons.reserve(size + 1); }
+
+    ~nearest_photon()
+    {
+        m_photons.clear();
+        m_photons.shrink_to_fit();
+    }
+
+    void push(const photon_query_result& value)
+    {
+        m_photons.emplace_back(value);
+        std::push_heap(m_photons.begin(), m_photons.end(), m_less);
+    }
+
+    bool empty() const
+    { return m_photons.empty(); }
+
+    size_t size() const
+    { return m_photons.size(); }
+
+    const photon_query_result& top() const
+    { return m_photons.front(); }
+
+    void pop()
+    {
+        std::pop_heap(m_photons.begin(), m_photons.end(), m_less);
+        m_photons.pop_back();
+    }
+
+    const photon_query_result& operator[](int index)
+    { return m_photons[index]; }
+
+private:
+    std::vector<photon_query_result>    m_photons;
+    std::less<photon_query_result>      m_less;
+};
 
 
 class photon_map
@@ -60,7 +101,7 @@ public:
     { recursive_search(query, m_root, result); }
 
     void store(const photon& value)
-    { m_points.push_back(value); }
+    { m_points.emplace_back(value); }
 
     void build()
     {
@@ -103,29 +144,29 @@ private:
         const int  axis  = node->axis;
         double     delta = query.pos.a[axis] - node->point->pos.a[axis];
         const auto dir   = node->point->pos - query.pos;
-        const auto dist  = dot(dir, dir);
-        const auto dt    = dot(query.normal, dir / sqrt(dist));
+        const auto dist2 = dot(dir, dir);
+        const auto dt    = dot(query.normal, dir / sqrt(dist2));
 
-        if (dist < query.max_dist && fabs(dt) <= query.max_dist * 0.01)
+        if (dist2 < query.max_dist2 && fabs(dt) <= query.max_dist2 * 0.01)
         {
-            result.push(photon_query_result(node->point, dist));
+            result.push(photon_query_result(node->point, dist2));
             if (result.size() > query.count)
             {
                 result.pop();
-                query.max_dist = result.top().dist;
+                query.max_dist2 = result.top().dist2;
             }
         }
 
         if (delta > 0.0)
         {
             recursive_search(query, node->right, result);
-            if (delta * delta < query.max_dist)
+            if (delta * delta < query.max_dist2)
             { recursive_search(query, node->left, result); }
         }
         else
         {
             recursive_search(query, node->left, result);
-            if (delta * delta < query.max_dist)
+            if (delta * delta < query.max_dist2)
             { recursive_search(query, node->right, result); }
         }
     }

@@ -197,6 +197,25 @@ struct BoundingBox
         mini = Vector3( D_MAX,  D_MAX,  D_MAX);
         maxi = Vector3(-D_MAX, -D_MAX, -D_MAX);
     }
+
+    inline Vector3 centroid() const
+    {
+        return Vector3(
+            (maxi.x + mini.x) * 0.5,
+            (maxi.y + mini.y) * 0.5,
+            (maxi.z + mini.z) * 0.5);
+    }
+
+    inline int longest_axis() const
+    {
+        auto axis_x = maxi.x - mini.x;
+        auto axis_y = maxi.y - mini.y;
+        auto axis_z = maxi.z - mini.z;
+        if (axis_x < axis_y)
+        { return (axis_y < axis_z) ? 2 : 1; }
+        else
+        { return (axis_x < axis_z) ? 2 : 0; }
+    }
 };
 
 

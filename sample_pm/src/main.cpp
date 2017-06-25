@@ -34,7 +34,7 @@ const Sphere  g_spheres[] = {
     Sphere(5.0,     Vector3(50.0,          81.6,          81.6), Vector3(),                   ReflectionType::Diffuse,          Vector3(12, 12, 12))
 };
 const int      g_lightId        = 8;
-const double   g_gather_radius  = 32.0;
+const double   g_gather_radius  = 10.0;
 const int      g_gather_count   = 512;
 
 //-------------------------------------------------------------------------------------------------
@@ -270,34 +270,30 @@ Vector3 radiance(const Ray& ray, int depth, Random* random, photon_map* photon_m
             query.pos       = hit_pos;
             query.normal    = orienting_normal;
             query.count     = g_gather_count;
-            query.max_dist  = g_gather_radius;
+            query.max_dist2 = g_gather_radius * g_gather_radius;
 
-            nearest_photon result;
+            nearest_photon result(g_gather_count);
             photon_map->search(query, result);
 
             Vector3 accumulated_flux(0, 0, 0);
             double max_dist2 = -1;
 
-            std::vector<photon_query_result, stack_allocator<photon_query_result>> photons;
-            photons.reserve(result.size());
-            while (!result.empty())
+            for(size_t i=0; i<result.size(); ++i)
             {
-                auto p = result.top();
-                result.pop();
-
-                photons.push_back(p);
-                max_dist2 = max(max_dist2, p.dist);
+                max_dist2 = max(max_dist2, result[i].dist2);
             }
 
             // 円錐フィルタ.
             {
+                Vector3 accumulated_flux(0, 0, 0);
+
                 const auto max_dist = sqrt(max_dist2);
                 const auto k = 1.1;
 
-                for (size_t i = 0; i < photons.size(); ++i)
+                for (size_t i = 0; i < result.size(); ++i)
                 {
-                    const auto w = 1.0 - (sqrt(photons[i].dist) / (k * max_dist));
-                    const auto v = (obj.color * photons[i].point->flux) / D_PI;
+                    const auto w = 1.0 - (sqrt(result[i].dist2) / (k * max_dist));
+                    const auto v = (obj.color * result[i].point->flux) / D_PI;
                     accumulated_flux += w * v;
                 }
                 accumulated_flux /= (1.0 - 2.0 / (3.0 * k));
